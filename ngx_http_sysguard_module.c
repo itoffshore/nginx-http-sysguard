@@ -9,10 +9,10 @@
 #include <ngx_http.h>
 #include <ngx_sysinfo.h>
 
-
 typedef struct {
     ngx_flag_t  enable;
     ngx_int_t   load;
+    ngx_int_t   scale;
     ngx_str_t   load_action;
     ngx_int_t   swap;
     ngx_str_t   swap_action;
@@ -51,7 +51,7 @@ static ngx_command_t  ngx_http_sysguard_commands[] = {
       NULL },
 
     { ngx_string("sysguard_load"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE123,
       ngx_http_sysguard_load,
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
@@ -318,7 +318,12 @@ ngx_http_sysguard_load(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             goto invalid;
         }
 
-        glcf->load = ngx_atofp(value[i].data + 5, value[i].len - 5, 3);
+	if (ngx_strcmp(value[i].data + 5, "auto") == 0) {
+	   glcf->load = ngx_ncpu * 1000;
+	} else {
+           glcf->load = ngx_atofp(value[i].data + 5, value[i].len - 5, 3);
+	}
+
         if (glcf->load == NGX_ERROR) {
             goto invalid;
         }
@@ -328,6 +333,26 @@ ngx_http_sysguard_load(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         }
 
         i++;
+
+        if (ngx_strncmp(value[i].data, "scale=", 6) == 0) {
+
+            if (value[i].len == 6) {
+                goto invalid;
+            }
+
+            glcf->scale = ngx_atofp(value[i].data + 6, value[i].len - 6, 3);
+
+            if (glcf->scale == NGX_ERROR) {
+                goto invalid;
+            }
+            glcf->load = glcf->scale * glcf->load / 1000;
+
+            if (cf->args->nelts == 3) {
+                return NGX_CONF_OK;
+            }
+
+            i++;
+        }
 
         if (ngx_strncmp(value[i].data, "action=", 7) != 0) {
             goto invalid;
